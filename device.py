@@ -30,6 +30,12 @@ class Device(object):
     def distance_to(self, device):
         return gps.distance(self._coords, device.gps_coords())
 
+    def queued_packets(self):
+        return self._forward_queue
+    
+    def known_packets(self):
+        return self._seen_packets
+
     def is_reachable_from(self, device):
         dist = gps.distance(self._coords, device.gps_coords())
 
@@ -41,21 +47,37 @@ class Device(object):
     def add_neighbor(self, neighbor):
         self._neighbors.add(neighbor)
 
+    def process_command_packet(self, packet):
+        if packet.msg() == "identify":
+            ack_str = "ack %s %s" % (self._id, packet.id())
+            new_packet = netpacket.NetPacket(ack_str)
+            print "ack packet:", new_packet
+            self.forward_packet(new_packet)
+
     def recv_packet(self, packet):
         if packet.id() in self._seen_packets:
             return True 
 
-        print "[%s] got packet %s" % (self._id, packet)
-        self._forward_queue.append(packet) 
-        self._seen_packets[self._sp_idx] = packet.id()
+        if isinstance(packet, netpacket.CommandPacket):
+            if packet.destination() == "global":
+                self.process_command_packet(packet)
+                self.forward_packet(packet)
+            elif packet.destination() == self._id:
+                self.process_command_packet(packet)
+            else:
+                self.forward_packet(packet)
+        else:
+            self.forward_packet(packet)
+
+    def forward_packet(self, packet):
+        new_packet = packet.clone()
+        new_packet.inc_hops()
+        self._forward_queue.append(new_packet) 
+        self._seen_packets[self._sp_idx] = new_packet.id()
         self._sp_idx = (self._sp_idx + 1) % len(self._seen_packets)
         return True
 
-
-    def update(self):
-        if random.uniform(0, 1) < 0.1:
-            self._forward_queue.append(netpacket.make_packet())
-
+    def forward_packets(self):
         while len(self._forward_queue) > 0:
             packet = self._forward_queue.pop(0)
             ok = True
@@ -66,7 +88,8 @@ class Device(object):
             if not ok:
                 self._forward_queue.append(packet)
 
-
+    def update(self):
+        self.forward_packets()
 
     def __str__(self):
         return "Device<x=%.1f y=%.1f tx=%.1f>" % (self._coords[0], self._coords[1], self._tx_dist)

@@ -1,10 +1,11 @@
 from matplotlib import pyplot
 
 class NetMesh(object):
-    def __init__(self, area_size):
-        self._devices = []
+    def __init__(self, area_size, base_station):
+        self._devices = [base_station]
         self._neighbor_edges = []
         self._area_size = area_size
+        self._base_station = base_station
 
     def devices(self):
         return self._devices
@@ -26,6 +27,12 @@ class NetMesh(object):
                 stop = device.gps_coords()
                 self._neighbor_edges.append(((start[0], stop[0]), (start[1], stop[1])))
 
+    def update(self):
+        for device in self._devices:
+            device.update()
+   
+        self._base_station.display_packet_stats()
+    
     def plot(self):
         xcoords = map(lambda d: d.gps_coords()[0], self._devices)
         ycoords = map(lambda d: d.gps_coords()[1], self._devices)
